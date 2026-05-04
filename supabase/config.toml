@@ -1,0 +1,34 @@
+project_id = "wbsmzbpndohahbutywew"
+
+[functions.parse-isap]
+verify_jwt = false
+
+[functions.send-verification-email]
+verify_jwt = false
+
+[functions.fetch-journals]
+verify_jwt = false
+
+[functions.import-mein-journals]
+verify_jwt = false
+
+[functions.enrich-journal-openalex]
+verify_jwt = false
+
+[functions.enrich-journal-comprehensive]
+verify_jwt = false
+
+[functions.enrich-journal-crossref]
+verify_jwt = false
+
+[functions.enrich-journal-doaj]
+verify_jwt = false
+
+[functions.enrich-journal-wikipedia]
+verify_jwt = false
+
+[functions.fetch-journal-history]
+verify_jwt = false
+
+[functions.enrich-journal-all]
+verify_jwt = false

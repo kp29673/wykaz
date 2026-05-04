@@ -1,0 +1,238 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 7%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 7%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 7%;
+
+    --primary: 0 0% 7%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 94%;
+    --secondary-foreground: 0 0% 7%;
+
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 0 0% 90%;
+    --accent-foreground: 0 0% 7%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
+    --ring: 0 0% 7%;
+
+    --radius: 0.5rem;
+
+    --neutral-50: 0 0% 97%;
+    --black: 0 0% 2%;
+    --surface-l1: hsl(var(--neutral-50));
+    --border-l1: hsl(var(--black) / 6%);
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 7%;
+    --sidebar-primary: 0 0% 7%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 94%;
+    --sidebar-accent-foreground: 0 0% 7%;
+    --sidebar-border: 0 0% 88%;
+    --sidebar-ring: 0 0% 7%;
+  }
+
+  .dark {
+    --background: 0 0% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 0 0% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 0 0% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 0 0% 6%;
+
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 1% 67%;
+
+    --accent: 0 0% 18%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 0 0% 19%;
+    --input: 0 0% 19%;
+    --ring: 210 40% 98%;
+    
+    --surface-l1: 0 0% 8%;
+    --surface-l2: 0 0% 10%;
+    --surface: 0 0% 13%;
+    --border-l1: 0 0% 99% / 6%;
+    --border-l2: 0 0% 99% / 10%;
+    --subtle: 0 1% 67%;
+    
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 210 40% 98%;
+    --sidebar-primary-foreground: 0 0% 8%;
+    --sidebar-accent: 0 0% 14%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 0 0% 19%;
+    --sidebar-ring: 210 40% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  }
+
+  h1 {
+    font-size: 4rem;
+    font-weight: 300;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+
+  button, a, input {
+    transition: box-shadow ease-in-out 0.1s, background-color ease-in-out 0.1s, color ease-in-out 0.1s;
+  }
+  
+  svg {
+    transition: fill 0.2s ease-out;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+
+  /* Modern dashboard utilities */
+  .glass-effect {
+    background: hsl(var(--card) / 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .stat-card-hover {
+    transition: all 0.2s ease;
+  }
+
+  .stat-card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px hsl(var(--foreground) / 0.08);
+  }
+
+  @keyframes slideInFromBottom {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-slide-in {
+    animation: slideInFromBottom 0.4s ease-out;
+  }
+
+  .minimal-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .minimal-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .minimal-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.15);
+    border-radius: 0;
+  }
+
+  .minimal-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.25);
+  }
+
+  .minimal-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.15) transparent;
+  }
+
+  /* Dashboard specific utilities */
+  .dashboard-card {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    transition: all 0.2s ease;
+  }
+
+  .dashboard-card:hover {
+    border-color: hsl(var(--border) / 0.8);
+    box-shadow: 0 1px 3px hsl(var(--foreground) / 0.1);
+  }
+
+  .nav-item {
+    transition: all 0.15s ease;
+  }
+
+  .nav-item:hover {
+    background: hsl(var(--accent));
+  }
+
+  .nav-item.active {
+    background: hsl(var(--accent));
+    color: hsl(var(--primary));
+    font-weight: 500;
+  }
+
+  /* X.ai text color utilities */
+  .text-subtle {
+    color: hsl(var(--subtle));
+  }
+
+  .text-primary {
+    color: hsl(var(--primary));
+  }
+
+  /* Hover scale animation */
+  .hover-scale {
+    transition: transform 0.2s ease;
+  }
+
+  .hover-scale:hover {
+    transform: scale(1.02);
+  }
+}

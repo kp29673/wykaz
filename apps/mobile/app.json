@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Kosma Piekarski",
+    "slug": "kosma-piekarski",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "scheme": "kosmapiekarski",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "pl.kosmapiekarski.app"
+    },
+    "android": {
+      "package": "pl.kosmapiekarski.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f766e"
+      }
+    },
+    "extra": {
+      "supabaseProjectId": "wbsmzbpndohahbutywew"
+    }
+  }
+}
