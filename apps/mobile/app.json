@@ -18,6 +18,9 @@
     },
     "extra": {
       "supabaseProjectId": "wbsmzbpndohahbutywew"
-    }
+    },
+    "plugins": [
+      "expo-router"
+    ]
   }
 }
