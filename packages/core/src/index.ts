@@ -24,6 +24,8 @@ export interface Journal {
   source_file?: string | null;
   in_current_wykaz?: boolean;
   if_proxy?: number | null;
+  impact_factor?: number | null;
+  impact_factor_source?: string | null;
   h_index?: number | null;
   i10_index?: number | null;
   is_oa?: boolean | null;
@@ -166,10 +168,14 @@ function getFetch(config: WykazClientConfig): typeof fetch {
 
 function buildSearchParams(filters: WykazFilters): URLSearchParams {
   const params = new URLSearchParams();
-  if (filters.q) params.set("q", filters.q);
+  const query = filters.q?.trim();
+  if (query) params.set("q", query);
   if (filters.minPoints !== undefined) params.set("minPoints", String(filters.minPoints));
   if (filters.maxPoints !== undefined) params.set("maxPoints", String(filters.maxPoints));
-  if (filters.discipline) params.set("discipline", filters.discipline);
+  if (filters.discipline) {
+    params.set("discipline", filters.discipline);
+    params.set("disciplines", filters.discipline);
+  }
   if (filters.oa_statuses?.length) params.set("oa_status", filters.oa_statuses.join(","));
   if (filters.apc_range) params.set("apc_range", filters.apc_range);
   if (filters.erih_plus) params.set("erih_plus", "true");

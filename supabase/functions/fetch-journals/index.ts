@@ -6,6 +6,46 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function normalizeText(value: unknown): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function parseNumber(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseList(value: string | null): string[] {
+  return value
+    ?.split(',')
+    .map((item) => item.trim())
+    .filter(Boolean) ?? [];
+}
+
+function looksLikeDisciplineCode(value: string): boolean {
+  return /^[A-Z0-9_.-]+$/.test(value.trim());
+}
+
+function matchesDiscipline(journal: any, filters: string[]): boolean {
+  if (filters.length === 0) return true;
+
+  const values = [
+    journal.discipline,
+    ...(Array.isArray(journal.disciplines) ? journal.disciplines : String(journal.disciplines ?? '').split(',')),
+    ...(Array.isArray(journal.discipline_codes) ? journal.discipline_codes : []),
+  ].map(normalizeText).filter(Boolean);
+
+  return filters.some((filter) => {
+    const normalizedFilter = normalizeText(filter);
+    return values.some((value) => value === normalizedFilter || value.includes(normalizedFilter));
+  });
+}
+
 serve(async (req): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -21,7 +61,7 @@ serve(async (req): Promise<Response> => {
     const q = url.searchParams.get('q');
     const minPoints = url.searchParams.get('minPoints');
     const maxPoints = url.searchParams.get('maxPoints');
-    const disciplines = url.searchParams.get('disciplines'); // Now comma-separated list
+    const disciplines = url.searchParams.get('disciplines') ?? url.searchParams.get('discipline');
     const oa_status = url.searchParams.get('oa_status');
     const apc_range = url.searchParams.get('apc_range');
     const erih_plus = url.searchParams.get('erih_plus');
@@ -34,9 +74,14 @@ serve(async (req): Promise<Response> => {
     const minimalSelectColumns = `
       id, journal_id, title, issn_print, issn_electronic, issn_l,
       publisher, country_code, is_oa, oa_status, h_index, if_proxy,
+      impact_factor, impact_factor_source,
       apc_amount, apc_currency, in_erih_plus, doaj_seal,
       openalex_updated_at, crossref_updated_at, doaj_updated_at, wikipedia_checked_at
     `.replace(/\s+/g, ' ').trim();
+
+    const minPointsValue = parseNumber(minPoints);
+    const maxPointsValue = parseNumber(maxPoints);
+    const disciplineFilter = parseList(disciplines);
 
     console.log('Search params:', { q, minPoints, maxPoints, disciplines, oa_status, sort_by, sort_order });
 
@@ -191,10 +236,6 @@ serve(async (req): Promise<Response> => {
     let rankingsData: any[] = [];
 
     const hasSearchText = !!(q && q.trim());
-    const disciplineFilter = disciplines
-      ?.split(',')
-      .map((d) => d.trim())
-      .filter(Boolean) ?? [];
 
     if (hasSearchText) {
       // SEARCH MODE: Smart search with pattern recognition
@@ -202,7 +243,7 @@ serve(async (req): Promise<Response> => {
         .from('journals_master')
         .select(minimalSelectColumns);
 
-      const normalized = q!.trim();
+      const normalized = q!.trim().replace(/\s+/g, ' ');
       
       // Detect ISSN pattern (e.g., 1234-5678 or 12345678)
       const isIssnPattern = /^\d{4}-?\d{3}[\dXx]$/i.test(normalized);
@@ -221,8 +262,9 @@ serve(async (req): Promise<Response> => {
           `issn_l.eq.${cleanIssn}`
         );
       } else {
-        // Text search: Use prefix match (fast with B-tree indexes)
-        journalQuery = journalQuery.ilike('title', `${normalized}%`);
+        // Text search: match words anywhere in the title. Prefix-only search made
+        // common queries like "medical journal" or middle title words return empty.
+        journalQuery = journalQuery.ilike('title', `%${normalized.replace(/[%_]/g, '\\$&')}%`);
       }
 
       // Filters that live on journals_master
@@ -274,7 +316,7 @@ serve(async (req): Promise<Response> => {
         journalQuery = journalQuery.order('h_index', { ascending: sort_order === 'asc', nullsFirst: false });
       }
 
-      journalQuery = journalQuery.limit(30); // Reduced to 30 for database stability
+      journalQuery = journalQuery.limit(80);
 
       const { data: journals, error: journalsError } = await journalQuery;
 
@@ -327,19 +369,23 @@ serve(async (req): Promise<Response> => {
           .select('id, journal_id, points, disciplines, discipline_codes')
           .eq('wykaz_id', latestWykaz.id);
 
-        if (minPoints) {
-          rankingsQuery = rankingsQuery.gte('points', parseInt(minPoints, 10));
+        if (minPointsValue !== null) {
+          rankingsQuery = rankingsQuery.gte('points', minPointsValue);
         }
-        if (maxPoints) {
-          rankingsQuery = rankingsQuery.lte('points', parseInt(maxPoints, 10));
+        if (maxPointsValue !== null) {
+          rankingsQuery = rankingsQuery.lte('points', maxPointsValue);
         }
 
         if (disciplineFilter.length > 0) {
-          rankingsQuery = rankingsQuery.contains('discipline_codes', disciplineFilter);
+          const allFiltersLookLikeCodes = disciplineFilter.every(looksLikeDisciplineCode);
+          rankingsQuery = rankingsQuery.contains(
+            allFiltersLookLikeCodes ? 'discipline_codes' : 'disciplines',
+            disciplineFilter
+          );
         }
 
         // Always sort by points in browse mode; we'll re-sort later if needed
-        rankingsQuery = rankingsQuery.order('points', { ascending: false }).limit(50);
+        rankingsQuery = rankingsQuery.order('points', { ascending: false }).limit(80);
 
         const { data: rankings, error: rankingsError } = await rankingsQuery;
 
@@ -457,6 +503,8 @@ serve(async (req): Promise<Response> => {
           disciplines: r.disciplines?.join(', ') ?? null,
           in_current_wykaz: true,
           if_proxy: j.if_proxy,
+          impact_factor: j.impact_factor,
+          impact_factor_source: j.impact_factor_source,
           h_index: j.h_index,
           is_oa: j.is_oa,
           works_count: j.works_count,
@@ -539,6 +587,8 @@ serve(async (req): Promise<Response> => {
         disciplines: null,
         in_current_wykaz: false,
         if_proxy: j.if_proxy,
+        impact_factor: j.impact_factor,
+        impact_factor_source: j.impact_factor_source,
         h_index: j.h_index,
         is_oa: j.is_oa,
         works_count: j.works_count,
@@ -602,7 +652,11 @@ serve(async (req): Promise<Response> => {
       }));
 
     // Combine ranked and unranked data
-    const allData = [...rankedData, ...unrankedData];
+    const allData = [...rankedData, ...unrankedData].filter((journal: any) => {
+      if (minPointsValue !== null && (journal.points ?? 0) < minPointsValue) return false;
+      if (maxPointsValue !== null && (journal.points ?? 0) > maxPointsValue) return false;
+      return matchesDiscipline(journal, disciplineFilter);
+    });
 
     // Apply final sorting in JS when needed (especially for points)
     let sortedData = [...allData];
