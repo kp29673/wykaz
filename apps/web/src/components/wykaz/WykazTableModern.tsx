@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { FollowCursorTooltip } from "@/components/ui/follow-cursor-tooltip";
@@ -16,6 +18,8 @@ interface WykazTableProps {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   onSort: (field: string) => void;
+  selectedDisciplines?: string[];
+  onDisciplineToggle?: (discipline: string) => void;
 }
 
 function normalizeCountryCode(countryCode?: string, countryName?: string): string | undefined {
@@ -77,6 +81,13 @@ function splitDisciplines(journal: Journal): string[] {
 function compactSource(source?: string | null): string {
   if (!source) return "source";
   return source.replace(/^https?:\/\//, "").replace(/^www\./, "").split(/[/?#]/)[0];
+}
+
+function getOpenAccessStatus(journal: Journal): { label: string; tone: "gold" | "green" | "neutral" } {
+  const status = String(journal.oa_status || "").toLowerCase();
+  if (status === "gold") return { label: "Gold Open Access", tone: "gold" };
+  if (journal.is_oa || ["hybrid", "bronze", "green"].includes(status)) return { label: "Open Access", tone: "green" };
+  return { label: "Brak Open Access", tone: "neutral" };
 }
 
 function MetricValue({
@@ -142,8 +153,12 @@ export function WykazTableModern({
   onRowClick,
   sortBy,
   sortOrder,
-  onSort
+  onSort,
+  selectedDisciplines = [],
+  onDisciplineToggle,
 }: WykazTableProps) {
+  const [expandedDisciplines, setExpandedDisciplines] = useState<Record<string, boolean>>({});
+
   const getSortIcon = (field: string) => {
     if (sortBy !== field) return <ChevronsUpDown className="h-3.5 w-3.5 opacity-35" />;
     return sortOrder === "asc"
@@ -151,14 +166,15 @@ export function WykazTableModern({
       : <ChevronDown className="h-3.5 w-3.5" />;
   };
 
-  const SortHeader = ({ field, label, align = "center" }: { field: string; label: string; align?: "center" | "right" }) => (
+  const SortHeader = ({ field, label, align = "center" }: { field: string; label: string; align?: "center" | "right" | "left" }) => (
     <button
       type="button"
       onClick={() => onSort(field)}
       className={cn(
         "inline-flex w-full items-center gap-1 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground",
         align === "center" && "justify-center",
-        align === "right" && "justify-end"
+        align === "right" && "justify-end",
+        align === "left" && "justify-start"
       )}
     >
       {label}
@@ -180,7 +196,7 @@ export function WykazTableModern({
         <BookOpen className="h-16 w-16 text-muted-foreground/40 mb-4" />
         <h3 className="text-lg font-semibold mb-2">Brak wyników</h3>
         <p className="text-muted-foreground max-w-md">
-          Nie znaleziono czasopism spełniających kryteria. Spróbuj zmienić filtry.
+          Brak wyników dla bieżących filtrów. Usuń dyscyplinę, zmień zakres punktów albo wpisz krótszy tytuł/ISSN.
         </p>
       </div>
     );
@@ -188,45 +204,70 @@ export function WykazTableModern({
 
   return (
     <TooltipProvider>
-      <div className="rounded-lg border border-border/40 bg-background animate-fade-in">
-        <Table className="min-w-[960px] table-fixed">
+      <div className="overflow-x-auto rounded-lg border border-border/40 bg-background animate-fade-in">
+        <Table className="min-w-[1040px] table-fixed">
           <TableHeader>
             <TableRow className="hover:bg-transparent border-border/50">
-              <TableHead className="w-[34%] font-semibold">Tytuł czasopisma</TableHead>
-              <TableHead className="w-[7%] text-center font-semibold">IF</TableHead>
+              <TableHead className="w-[9%] text-left">
+                <SortHeader field="points" label="Punkty MEiN" align="left" />
+              </TableHead>
+              <TableHead className="w-[35%]">
+                <SortHeader field="title" label="Tytuł czasopisma" align="left" />
+              </TableHead>
+              <TableHead className="w-[8%] text-center">
+                <SortHeader field="impact_factor" label="IF" />
+              </TableHead>
               <TableHead className="w-[8%] text-center">
                 <SortHeader field="if_proxy" label="proxy IF" />
               </TableHead>
               <TableHead className="w-[8%] text-center">
                 <SortHeader field="h_index" label="h-index" />
               </TableHead>
-              <TableHead className="w-[27%] font-semibold">Kategorie / dyscypliny</TableHead>
-              <TableHead className="w-[9%] font-semibold">Open Access</TableHead>
-              <TableHead className="w-[7%] text-right">
-                <SortHeader field="points" label="Punkty MEiN" align="right" />
+              <TableHead className="w-[32%] font-semibold">
+                <span className="text-xs text-muted-foreground">Kategorie / dyscypliny</span>
+                <span className="ml-2 text-[10px] font-normal text-muted-foreground/70">kliknij dyscyplinę, aby filtrować</span>
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.map((journal, idx) => {
+              const rowKey = `${journal.id || journal.journal_id || journal.title}-${idx}`;
               const iso2 = normalizeCountryCode(journal.country_code, journal.country);
               const FlagComponent = iso2 ? flags[iso2 as keyof typeof flags] : null;
               const countryFullName = getCountryFullName(iso2, journal.country);
               const publisherName = journal.publisher?.trim() || journal.host_organization?.trim() || "";
               const publisherAbbr = getPublisherAbbr(publisherName);
               const disciplineArray = splitDisciplines(journal);
+              const expanded = Boolean(expandedDisciplines[rowKey]);
+              const visibleDisciplines = expanded ? disciplineArray : disciplineArray.slice(0, 4);
+              const hiddenDisciplines = Math.max(0, disciplineArray.length - visibleDisciplines.length);
               const issnItems = [
                 { label: "ISSN", value: journal.issn_print },
                 { label: "eISSN", value: journal.issn_electronic },
                 { label: "ISSN-L", value: journal.issn_l },
               ].filter((item) => item.value);
+              const oaStatus = getOpenAccessStatus(journal);
 
               return (
                 <TableRow
-                  key={`${journal.id || journal.journal_id}-${idx}`}
+                  key={rowKey}
                   onClick={() => onRowClick(journal)}
                   className="group cursor-pointer border-border/30 transition-colors hover:bg-muted/35"
                 >
+                  <TableCell className="py-4 align-top">
+                    <span
+                      className={cn(
+                        "inline-flex min-w-16 flex-col items-center justify-center rounded-xl px-3 py-2 text-center tabular-nums",
+                        journal.points >= 140 && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                        journal.points >= 70 && journal.points < 140 && "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+                        journal.points < 70 && "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      <span className="text-2xl font-black leading-none">{journal.points}</span>
+                      <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wide opacity-75">pkt</span>
+                    </span>
+                  </TableCell>
+
                   <TableCell className="py-4 pr-5 align-top">
                     <div className="flex min-w-0 items-start gap-4">
                       <FollowCursorTooltip
@@ -269,8 +310,12 @@ export function WykazTableModern({
                       </FollowCursorTooltip>
 
                       <div className="min-w-0 flex-1">
-                        <div className="text-[15px] font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
-                          {journal.title}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[15px] font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
+                            {journal.title}
+                          </span>
+                          <StatusPill label={oaStatus.label} tone={oaStatus.tone} />
+                          {journal.in_erih_plus && <StatusPill label="ERIH+" tone="blue" />}
                         </div>
                         {journal.abbreviated_title && (
                           <div className="mt-1 text-xs text-muted-foreground">
@@ -297,77 +342,60 @@ export function WykazTableModern({
                   </TableCell>
 
                   <TableCell className="py-4 text-right align-top">
-                    <MetricValue
-                      value={journal.impact_factor}
-                      label="Impact Factor"
-                      source={journal.impact_factor_source}
-                    />
+                    <MetricValue value={journal.impact_factor} label="Impact Factor" source={journal.impact_factor_source} />
                   </TableCell>
 
                   <TableCell className="py-4 text-right align-top">
-                    <MetricValue
-                      value={journal.if_proxy}
-                      label="proxy IF"
-                      source={journal.data_provenance?.if_proxy?.source || "OpenAlex"}
-                    />
+                    <MetricValue value={journal.if_proxy} label="proxy IF" source={journal.data_provenance?.if_proxy?.source || "OpenAlex"} />
                   </TableCell>
 
                   <TableCell className="py-4 text-right align-top">
-                    <MetricValue
-                      value={journal.h_index}
-                      label="h-index"
-                      source={journal.data_provenance?.h_index?.source || "OpenAlex"}
-                      digits={0}
-                    />
+                    <MetricValue value={journal.h_index} label="h-index" source={journal.data_provenance?.h_index?.source || "OpenAlex"} digits={0} />
                   </TableCell>
 
                   <TableCell className="py-4 align-top">
                     {disciplineArray.length > 0 ? (
                       <div className="flex flex-wrap gap-1.5">
-                        {disciplineArray.map((disc) => (
-                          <span
-                            key={disc}
-                            className="rounded-full bg-muted/70 px-2 py-1 text-xs leading-snug text-muted-foreground"
+                        {visibleDisciplines.map((disc) => {
+                          const selected = selectedDisciplines.includes(disc);
+                          return (
+                            <button
+                              key={disc}
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onDisciplineToggle?.(disc);
+                              }}
+                              className={cn(
+                                "rounded-full px-2 py-1 text-left text-xs leading-snug transition-colors",
+                                selected
+                                  ? "bg-primary/15 text-primary ring-1 ring-primary/30"
+                                  : "bg-muted/70 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                              )}
+                              title={`Filtruj po dyscyplinie: ${disc}`}
+                            >
+                              {disc}
+                            </button>
+                          );
+                        })}
+                        {disciplineArray.length > 4 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 rounded-full px-2 text-xs text-muted-foreground"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setExpandedDisciplines((current) => ({ ...current, [rowKey]: !expanded }));
+                            }}
                           >
-                            {disc}
-                          </span>
-                        ))}
+                            {expanded ? "Zwiń" : `Rozwiń +${hiddenDisciplines}`}
+                          </Button>
+                        )}
                       </div>
                     ) : (
                       <span className="text-sm text-muted-foreground/60">—</span>
                     )}
-                  </TableCell>
-
-                  <TableCell className="py-4 align-top">
-                    <div className="flex flex-wrap gap-1.5">
-                      {journal.oa_status === "gold" && <StatusPill label="Gold OA" tone="gold" />}
-                      {journal.is_oa && journal.oa_status !== "gold" && <StatusPill label="OA" tone="green" />}
-                      {journal.in_erih_plus && <StatusPill label="ERIH+" tone="blue" />}
-                      {journal.preservation_status && <StatusPill label="Archive" tone="green" />}
-                      {!journal.is_oa && !journal.in_erih_plus && !journal.preservation_status && (
-                        <span className="text-sm text-muted-foreground/60">—</span>
-                      )}
-                    </div>
-                  </TableCell>
-
-                  <TableCell className="py-4 text-right align-top">
-                    <div className="flex items-start justify-end gap-2">
-                      <span
-                        className={cn(
-                          "inline-flex min-w-12 justify-center rounded-full px-2.5 py-1 text-sm font-semibold tabular-nums",
-                          journal.points >= 140 && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                          journal.points >= 70 && journal.points < 140 && "bg-sky-500/10 text-sky-700 dark:text-sky-300",
-                          journal.points < 70 && "bg-orange-500/10 text-orange-700 dark:text-orange-300"
-                        )}
-                      >
-                        {journal.points}
-                      </span>
-                      {journal.in_current_wykaz === false && (
-                        <span className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
-                          Poza aktualnym
-                        </span>
-                      )}
-                    </div>
                   </TableCell>
                 </TableRow>
               );
