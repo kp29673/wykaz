@@ -4,6 +4,8 @@ export interface DataProvenanceField {
   method?: string;
 }
 
+export type WykazSortField = "points" | "title" | "impact_factor" | "if_proxy" | "h_index";
+
 export interface Journal {
   id?: string | null;
   journal_id?: string | null;
@@ -106,13 +108,16 @@ export interface WykazFilters {
   minPoints?: number;
   maxPoints?: number;
   discipline?: string;
+  disciplines?: string[];
   oa_statuses?: string[];
   apc_range?: string;
   erih_plus?: boolean;
   has_doaj?: boolean;
   country_codes?: string[];
-  sort_by?: "points" | "title" | "if_proxy" | "h_index";
+  sort_by?: WykazSortField;
   sort_order?: "asc" | "desc";
+  limit?: number;
+  offset?: number;
 }
 
 export interface WykazResponse {
@@ -172,9 +177,11 @@ function buildSearchParams(filters: WykazFilters): URLSearchParams {
   if (query) params.set("q", query);
   if (filters.minPoints !== undefined) params.set("minPoints", String(filters.minPoints));
   if (filters.maxPoints !== undefined) params.set("maxPoints", String(filters.maxPoints));
-  if (filters.discipline) {
-    params.set("discipline", filters.discipline);
-    params.set("disciplines", filters.discipline);
+  const selectedDisciplines = filters.disciplines?.length ? filters.disciplines : (filters.discipline ? [filters.discipline] : []);
+  if (selectedDisciplines.length) {
+    const value = selectedDisciplines.join(",");
+    params.set("disciplines", value);
+    params.set("discipline", value);
   }
   if (filters.oa_statuses?.length) params.set("oa_status", filters.oa_statuses.join(","));
   if (filters.apc_range) params.set("apc_range", filters.apc_range);
@@ -183,6 +190,8 @@ function buildSearchParams(filters: WykazFilters): URLSearchParams {
   if (filters.country_codes?.length) params.set("country_codes", filters.country_codes.join(","));
   if (filters.sort_by) params.set("sort_by", filters.sort_by);
   if (filters.sort_order) params.set("sort_order", filters.sort_order);
+  if (filters.limit !== undefined) params.set("limit", String(filters.limit));
+  if (filters.offset !== undefined) params.set("offset", String(filters.offset));
   return params;
 }
 
@@ -199,10 +208,11 @@ function normalizeResponse(data: unknown, maxResults: number): WykazResponse {
 
   const payload = data as Partial<WykazResponse> | undefined;
   const journals = Array.isArray(payload?.data) ? payload.data : [];
+  const count = typeof payload?.count === "number" ? payload.count : journals.length;
   return {
     data: journals.slice(0, maxResults),
-    count: journals.length,
-    hasMore: payload?.hasMore ?? false,
+    count,
+    hasMore: payload?.hasMore ?? journals.length >= maxResults,
     timeout: payload?.timeout ?? false
   };
 }
@@ -220,13 +230,17 @@ function fallbackJournals(filters: WykazFilters, maxResults: number): WykazRespo
   if (filters.maxPoints !== undefined) {
     filtered = filtered.filter((journal) => journal.points <= filters.maxPoints!);
   }
-  if (filters.discipline) {
-    const query = filters.discipline.toLowerCase();
+  const disciplineFilters = filters.disciplines?.length ? filters.disciplines : (filters.discipline ? [filters.discipline] : []);
+  if (disciplineFilters.length) {
+    const normalizedFilters = disciplineFilters.map((item) => item.toLowerCase());
     filtered = filtered.filter((journal) => {
       const disciplines = Array.isArray(journal.disciplines)
         ? journal.disciplines
         : [journal.discipline, journal.disciplines].filter(Boolean);
-      return disciplines.some((discipline) => String(discipline).toLowerCase().includes(query));
+      return disciplines.some((discipline) => {
+        const normalized = String(discipline).toLowerCase();
+        return normalizedFilters.some((filter) => normalized.includes(filter));
+      });
     });
   }
 
